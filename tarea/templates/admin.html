@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Apartado de Administrador</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Estilos personalizados -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}"/>
+
+  <!-- Ajustes para scroll horizontal -->
+  <style>
+    /* Contenedor que siempre permita scroll */
+    #mainContent {
+      overflow-x: auto;
+    }
+    /* Forzamos que la tabla sea más ancha que el contenedor */
+    #mainContent .table-responsive table {
+      min-width: 1200px; /* Ajusta este valor según tus columnas */
+    }
+    /* Hacemos la tabla más compacta */
+    #mainContent .table-responsive table.table {
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="d-flex">
+    <!-- Sidebar -->
+    <nav id="sidebar" class="bg-light border-end vh-100">
+      <div class="sidebar-header p-3"><h4>Tareas</h4></div>
+      <ul class="list-unstyled components px-2">
+        <li><a href="#" id="dashboard-link" class="nav-link active">📊 Dashboard</a></li>
+        <li>
+          <a href="#cursosSubmenu" data-bs-toggle="collapse" class="dropdown-toggle nav-link">👩🏻‍🎓 Cursos</a>
+          <ul class="collapse list-unstyled ps-3" id="cursosSubmenu">
+            {% for c in ['6A','6B','6C','7A','7B','7C','8A','8B','8C','9A','9B','9C','10A','10B','10C','11A','11B','11C'] %}
+              <li><a href="#" class="nav-link curso-link" data-curso="{{ c }}">{{ c }}</a></li>
+            {% endfor %}
+          </ul>
+        </li>
+        <li>
+          <a href="#materiasSubmenu" data-bs-toggle="collapse" class="dropdown-toggle nav-link">📓 Materias</a>
+          <ul class="collapse list-unstyled ps-3" id="materiasSubmenu">
+            {% for m in ['Matemática','Sociales','Inglés','Biología','Español','Educación física','Etica & Valores','Química','Física'] %}
+              <li><a href="#" class="nav-link materia-link" data-materia="{{ m }}">{{ m }}</a></li>
+            {% endfor %}
+          </ul>
+        </li>
+        <li><a href="#" id="profesores-link" class="nav-link">👨‍🏫 Profesores</a></li>
+        <li><a href="#" class="nav-link registro-profesor-link">✍️ Registro de Profesor</a></li>
+      </ul>
+    </nav>
+
+    <!-- Contenido principal -->
+    <div id="content" class="flex-grow-1 p-4">
+      <!-- Estadísticas -->
+      <div id="stats" class="row mb-4">
+        <div class="col-md-3"><div class="card stat-card p-3"><h5>Total Estudiantes</h5><p id="totalEstudiantes">0</p></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><h5>Total Profesores</h5><p id="totalProfesores">0</p></div></div>
+        <div class="col-md-3"><div class="card stat-card p-3"><h5>Total Materias</h5><p id="totalMaterias">9</p></div></div>
+      </div>
+      <!-- Aquí inyectaremos tabla o formulario -->
+      <div id="mainContent"></div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const statsEl          = document.getElementById('stats');
+    const totalEstudiantes = document.getElementById('totalEstudiantes');
+    const totalProfesores  = document.getElementById('totalProfesores');
+    const totalMaterias    = document.getElementById('totalMaterias');
+    const mainContent      = document.getElementById('mainContent');
+
+    const dashboardLink  = document.getElementById('dashboard-link');
+    const profesoresLink = document.getElementById('profesores-link');
+    const registroLinks  = document.querySelectorAll('.registro-profesor-link');
+
+    function renderizarTabla(headers, rows, keys) {
+      let html = '<div class="table-responsive"><table class="table table-striped table-sm"><thead><tr>';
+      headers.forEach(h => html += `<th>${h}</th>`);
+      html += '<th>Acciones</th></tr></thead><tbody>';
+      rows.forEach(r => {
+        html += `<tr data-id="${r.id}">`;
+        keys.forEach(k => html += `<td>${r[k]||''}</td>`);
+        html += `
+          <td>
+            <button class="btn btn-sm btn-primary btn-edit">Editar</button>
+            <button class="btn btn-sm btn-danger btn-disable">Inactivar</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      mainContent.innerHTML = html;
+      document.querySelectorAll('.btn-edit').forEach(b => b.onclick = onEdit);
+      document.querySelectorAll('.btn-disable').forEach(b => b.onclick = onDisable);
+    }
+
+    async function cargarEstadisticas() {
+      try {
+        const resE = await fetch('/api/estudiantes/count',{credentials:'same-origin'});
+        if(resE.ok) totalEstudiantes.textContent = (await resE.json()).count;
+      } catch{}
+      try {
+        const resP = await fetch('/api/profesores/count',{credentials:'same-origin'});
+        totalProfesores.textContent = resP.ok ? (await resP.json()).count : '0';
+      } catch{ totalProfesores.textContent='0'; }
+    }
+
+    dashboardLink.addEventListener('click', e => {
+      e.preventDefault();
+      statsEl.style.display = 'flex';
+      mainContent.innerHTML = '';
+      cargarEstadisticas();
+    });
+
+    profesoresLink.addEventListener('click', async e => {
+      e.preventDefault();
+      statsEl.style.display = 'none';
+      try {
+        const res = await fetch('/api/profesores',{credentials:'same-origin'});
+        if(!res.ok) throw '';
+        renderizarTabla(
+          ['Nombre','Apellido','Usuario','Documento','Líder','Experiencia','Materia','Correo','Teléfono','Dirección','Estado','Fecha Registro'],
+          await res.json(),
+          ['nombre','apellido','nombre_usuario','documento','lider','experiencia','materia','correo','telefono','direccion','estado','fecha_de_registro']
+        );
+      } catch {
+        alert('❌ Error cargando profesores');
+      }
+    });
+
+    function mostrarFormulario(prof={}) {
+      const isEdit = !!prof.id;
+      const title  = isEdit?'Editar Profesor':'Crear Profesor';
+      mainContent.innerHTML = `
+        <h4>${title}</h4>
+        <form id="formProfesor" class="row g-3">
+          <div class="col-md-6"><label>Nombre</label><input name="nombre" value="${prof.nombre||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Apellido</label><input name="apellido" value="${prof.apellido||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Usuario</label><input name="nombre_usuario" value="${prof.nombre_usuario||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Documento</label><input name="documento" value="${prof.documento||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Correo</label><input type="email" name="correo" value="${prof.correo||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Experiencia</label><input name="experiencia" value="${prof.experiencia||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Materia</label>
+            <select name="materia" class="form-select" required>
+              ${['Matemática','Sociales','Inglés','Biología','Español','Educación física','Etica & Valores','Química','Física']
+                .map(m=>`<option${prof.materia===m?' selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-md-6"><label>Líder de Curso</label><input name="lider" value="${prof.lider||''}" class="form-control" required></div>
+          <div class="col-md-6"><label>Teléfono</label><input name="telefono" value="${prof.telefono||''}" class="form-control" required></div>
+          <div class="col-md-12"><label>Dirección</label><input name="direccion" value="${prof.direccion||''}" class="form-control" required></div>
+          <div class="col-12"><button type="submit" class="btn btn-success">${title}</button></div>
+        </form>`;
+
+      document.getElementById('formProfesor').addEventListener('submit',async ev=>{
+        ev.preventDefault();
+        const data=Object.fromEntries(new FormData(ev.target).entries());
+        const url=isEdit?`/api/profesores/${prof.id}`:'/api/profesores';
+        const method=isEdit?'PUT':'POST';
+        try{
+          const res=await fetch(url,{method,credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+          const result=await res.json();
+          if(!res.ok){alert('❌ '+(result.error||'Error desconocido'));return;}
+          alert('✅ Profesor '+(isEdit?'actualizado':'creado')+' correctamente');
+          cargarEstadisticas();
+          profesoresLink.click();
+        }catch{
+          alert('❌ No se pudo conectar');
+        }
+      });
+    }
+
+    function onEdit(e){
+      const tr=e.target.closest('tr'),td=tr.querySelectorAll('td');
+      mostrarFormulario({
+        id:tr.dataset.id,
+        nombre:td[0].textContent,apellido:td[1].textContent,
+        nombre_usuario:td[2].textContent,documento:td[3].textContent,
+        lider:td[4].textContent,experiencia:td[5].textContent,
+        materia:td[6].textContent,correo:td[7].textContent,
+        telefono:td[8].textContent,direccion:td[9].textContent
+      });
+    }
+
+    async function onDisable(e){
+      if(!confirm('¿Inactivar este profesor?'))return;
+      const tr=e.target.closest('tr'),id=tr.dataset.id;
+      try{
+        const res=await fetch(`/api/profesores/${id}`,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({estado:'Inactivo'})});
+        if(!res.ok)throw'';
+        tr.remove();
+        totalProfesores.textContent=(+totalProfesores.textContent-1).toString();
+      }catch{alert('❌ Error al inactivar');}
+    }
+
+    registroLinks.forEach(link=>{
+      link.addEventListener('click',e=>{
+        e.preventDefault();
+        statsEl.style.display='none';
+        mostrarFormulario();
+      });
+    });
+
+    statsEl.style.display='flex';
+    cargarEstadisticas();
+  });
+  </script>
+</body>
+</html>
